@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Game with Timer and Sound</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        canvas {
+            border: 1px solid black;
+        }
+        #timer {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        #completionMessage {
+            font-size: 24px;
+            margin-top: 10px;
+            display: none;
+        }
+        #restartButton {
+            display: none;
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="timer">Time: 0s</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <audio id="winSound" src="win-sound.mp3"></audio> <!-- Replace with your sound file -->
+    <div id="completionMessage"></div>
+    <button id="restartButton" onclick="restartGame()">Restart</button>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const timerElement = document.getElementById('timer');
+        const winSound = document.getElementById('winSound');
+        const completionMessage = document.getElementById('completionMessage');
+        const restartButton = document.getElementById('restartButton');
+
+        const maze = [
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+            [1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        ];
+
+        const tileSize = 50;
+
+        let character = {
+            x: 0,
+            y: 0,
+            width: tileSize - 10,
+            height: tileSize - 10,
+            speed: 2,
+            dx: 0,
+            dy: 0,
+            image: new Image()
+        };
+        character.image.src = 'avatar.png'; // Replace with your avatar image file
+
+        let princess = {
+            x: 14 * tileSize,
+            y: 10 * tileSize,
+            width: tileSize - 10,
+            height: tileSize - 10,
+            image: new Image()
+        };
+        princess.image.src = 'princess.png'; // Replace with your princess image file
+
+        let startTime = null;
+        let timerInterval = null;
+
+        function drawMaze() {
+            for (let row = 0; row < maze.length; row++) {
+                for (let col = 0; col < maze[row].length; col++) {
+                    if (maze[row][col] === 1) {
+                        ctx.fillStyle = 'black';
+                        ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
+                    }
+                }
+            }
+        }
+
+        function drawCharacter() {
+            ctx.drawImage(character.image, character.x, character.y, character.width, character.height);
+        }
+
+        function drawPrincess() {
+            ctx.drawImage(princess.image, princess.x, princess.y, princess.width, princess.height);
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function updateCharacterPosition() {
+            let newX = character.x + character.dx;
+            let newY = character.y + character.dy;
+
+            // Check for collisions with walls
+            if (maze[Math.floor(newY / tileSize)][Math.floor(newX / tileSize)] === 0 &&
+                maze[Math.floor((newY + character.height) / tileSize)][Math.floor(newX / tileSize)] === 0 &&
+                maze[Math.floor(newY / tileSize)][Math.floor((newX + character.width) / tileSize)] === 0 &&
+                maze[Math.floor((newY + character.height) / tileSize)][Math.floor((newX + character.width) / tileSize)] === 0) {
+                character.x = newX;
+                character.y = newY;
+            }
+
+            // Check if character meets the princess
+            if (character.x < princess.x + princess.width &&
+                character.x + character.width > princess.x &&
+                character.y < princess.y + princess.height &&
+                character.y + character.height > princess.y) {
+                clearInterval(timerInterval);
+                winSound.play();
+                setTimeout(() => {
+                    const elapsedTime = timerElement.textContent.split(' ')[1];
+                    completionMessage.textContent = `Congratulations! You completed the maze in ${elapsedTime}`;
+                    completionMessage.style.display = 'block';
+                    restartButton.style.display = 'block';
+                }, 100); // Delay the message slightly to allow the sound to play
+            }
+        }
+
+        function startTimer() {
+            startTime = new Date();
+            timerInterval = setInterval(() => {
+                const currentTime = new Date();
+                const elapsedTime = Math.floor((currentTime - startTime) / 1000);
+                timerElement.textContent = `Time: ${elapsedTime}s`;
+            }, 1000);
+        }
+
+        function gameLoop() {
+            clearCanvas();
+            drawMaze();
+            drawCharacter();
+            drawPrincess();
+            updateCharacterPosition();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function restartGame() {
+            character.x = 0;
+            character.y = 0;
+            character.dx = 0;
+            character.dy = 0;
+            startTime = null;
+            timerElement.textContent = 'Time: 0s';
+            completionMessage.style.display = 'none';
+            restartButton.style.display = 'none';
+            gameLoop();
+        }
+
+        window.addEventListener('keydown', (event) => {
+            if (!startTime) {
+                startTimer();
+            }
+            switch (event.key) {
+                case 'ArrowLeft':
+                    character.dx = -character.speed;
+                    break;
+                case 'ArrowRight':
+                    character.dx = character.speed;
+                    break;
+                case 'ArrowUp':
+                    character.dy = -character.speed;
+                    break;
+                case 'ArrowDown':
+                    character.dy = character.speed;
+                    break;
+            }
+        });
+
+        window.addEventListener('keyup', (event) => {
+            switch (event.key) {
+                case 'ArrowLeft':
+                case 'ArrowRight':
+                    character.dx = 0;
+                    break;
+                case 'ArrowUp':
+                case 'ArrowDown':
+                    character.dy = 0;
+                    break;
+            }
+        });
+
+        character.image.onload = function() {
+            drawMaze();
+            drawCharacter();
+            drawPrincess();
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
