@@ -43,6 +43,8 @@
 
         const birdImg = new Image();
         birdImg.src = 'bird.jpeg';
+        birdImg.onload = startCountdown;
+
 
         const bird = {
             x: 50,
@@ -56,12 +58,46 @@
 
         let pipes = [];
         const pipeWidth = 60;
-        const pipeGap = 200;
+        const pipeGap = 250;
         const pipeFrequency = 100; // Frames between pipes
         const marginOfError = 20; // Margin of error for collision detection
         let frameCount = 0;
         let score = 0;
         let gameOver = false;
+        let countdown = 3;
+        let countdownInterval;
+        let gameStarted = false;
+
+
+
+        function drawCountdown() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'black';
+            ctx.font = '72px Arial';
+            if (countdown > 0) {
+                ctx.fillText(countdown, canvas.width / 2 - 20, canvas.height / 2);
+            } else {
+                ctx.fillText('Go!', canvas.width / 2 - 50, canvas.height / 2);
+            }
+        }
+
+        function startCountdown() {
+            drawCountdown();
+            countdownInterval = setInterval(() => {
+                countdown--;
+                drawCountdown();
+                if (countdown === 0) {
+                    clearInterval(countdownInterval);
+                    drawCountdown(); // Show "Go!" clearly
+                    setTimeout(() => {
+                        bird.velocity = bird.lift;
+                        gameStarted = true;
+                        requestAnimationFrame(gameLoop);
+                    }, 500); // Show "Go!" for 500ms
+                }
+            }, 1000);
+        }
+
 
         function drawBird() {
             ctx.drawImage(birdImg, bird.x, bird.y, bird.width, bird.height);
@@ -142,9 +178,12 @@
             frameCount = 0;
             score = 0;
             gameOver = false;
+            gameStarted = false;
+            countdown = 3;
             restartButton.style.display = 'none';
-            gameLoop();
+            startCountdown();
         }
+
 
         function gameLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -162,6 +201,7 @@
             }
         }
 
+
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space' && !gameOver) {
                 bird.velocity = bird.lift;
@@ -170,7 +210,7 @@
 
         restartButton.addEventListener('click', resetGame);
 
-        birdImg.onload = gameLoop;
+
     </script>
 </body>
 </html>
