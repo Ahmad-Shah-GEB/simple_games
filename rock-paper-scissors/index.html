@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rock Paper Scissors</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        .choice-img {
+            width: 100px;
+            height: 100px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        #result, #score {
+            margin-top: 20px;
+            font-size: 20px;
+        }
+        #result {
+            margin-bottom: 20px; /* Add margin to push the result message down */
+        }
+        .animation {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            animation-duration: 1s; /* Adjusted to 1 second */
+            animation-fill-mode: forwards;
+        }
+        .player-animation {
+            left: -100px;
+            animation-name: playerMove;
+        }
+        .computer-animation {
+            right: -100px;
+            animation-name: computerMove;
+        }
+        @keyframes playerMove {
+            0% { left: -100px; }
+            100% { left: 50%; transform: translate(-50%, -50%); }
+        }
+        @keyframes computerMove {
+            0% { right: -100px; }
+            100% { right: 50%; transform: translate(50%, -50%); }
+        }
+        .winner {
+            animation: winner 0.5s forwards; /* Adjusted to 0.5 seconds */
+        }
+        .loser {
+            animation: loser 0.5s forwards; /* Adjusted to 0.5 seconds */
+        }
+        @keyframes winner {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.2); }
+        }
+        @keyframes loser {
+            0% { transform: scale(1); }
+            100% { transform: scale(0.7); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Rock Paper Scissors</h1>
+    <img src="rock.png" class="choice-img" onclick="playGame('rock')" alt="Rock">
+    <img src="paper.png" class="choice-img" onclick="playGame('paper')" alt="Paper">
+    <img src="scissors.png" class="choice-img" onclick="playGame('scissors')" alt="Scissors">
+    <div id="result"></div>
+    <div id="score">Player: 0 | Computer: 0</div>
+
+    <script>
+        let playerScore = 0;
+        let computerScore = 0;
+
+        function playGame(userChoice) {
+            const choices = ['rock', 'paper', 'scissors'];
+            const computerChoice = choices[Math.floor(Math.random() * 3)];
+            let result = '';
+
+            if (userChoice === computerChoice) {
+                result = 'It\'s a tie!';
+            } else if (
+                (userChoice === 'rock' && computerChoice === 'scissors') ||
+                (userChoice === 'paper' && computerChoice === 'rock') ||
+                (userChoice === 'scissors' && computerChoice === 'paper')
+            ) {
+                result = 'You win!';
+                playerScore++;
+            } else {
+                result = 'You lose!';
+                computerScore++;
+            }
+
+            document.getElementById('result').innerHTML = `
+                <div class="face-to-face">
+                    <img src="${userChoice}.png" class="choice-img player-animation">
+                    <img src="${computerChoice}.png" class="choice-img computer-animation">
+                </div>
+            `;
+
+            setTimeout(() => {
+                const playerClass = result === 'You win!' ? 'winner' : 'loser';
+                const computerClass = result === 'You lose!' ? 'winner' : 'loser';
+                document.querySelector('.face-to-face').innerHTML = `
+                    <img src="${userChoice}.png" class="choice-img ${playerClass}">
+                    <img src="${computerChoice}.png" class="choice-img ${computerClass}">
+                `;
+                document.getElementById('result').innerHTML += `<div>${result}</div>`;
+                document.getElementById('score').innerText = `Player: ${playerScore} | Computer: ${computerScore}`;
+            }, 1000); // Adjusted to 1 second
+        }
+    </script>
+</body>
+</html>
