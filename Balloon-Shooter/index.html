@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Archer vs Balloons - Arrows, Score, Hi Score, Game Over</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #87ceeb;
+            overflow: hidden;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            background: #87ceeb;
+        }
+        #restartButton {
+            display: none;
+            position: absolute;
+            top: 60%; /* moved a bit lower to appear below "Game Over" */
+            left: 400px;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #ff5050;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        #restartButton:hover {
+            background-color: #e04141;
+        }
+
+    </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<button id="restartButton">Restart Game</button>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const restartButton = document.getElementById('restartButton');
+
+    let archer, arrows, balloons, columns, arrowsLeft, score, hiScore, gameOver;
+
+    function resetGame() {
+        archer = { x: 50, y: canvas.height / 2, width: 20, height: 40 };
+        arrows = [];
+        balloons = [];
+        columns = [canvas.width - 100, canvas.width - 150, canvas.width - 200, canvas.width - 250, canvas.width - 300, canvas.width - 350, canvas.width - 400, canvas.width - 450];
+        arrowsLeft = 25;
+        score = 0;
+        gameOver = false;
+        restartButton.style.display = 'none';
+        update();
+    }
+
+    hiScore = 0;
+
+    function getRandomColor() {
+        const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    function createBalloon() {
+        if (!gameOver) {
+            const x = columns[Math.floor(Math.random() * columns.length)];
+            const y = canvas.height;
+            const color = getRandomColor();
+            const speed = 1 + Math.random() * 2;
+            balloons.push({ x, y, radius: 20, speed, color });
+        }
+    }
+
+    setInterval(createBalloon, 1000);
+
+    function shootArrow() {
+        if (!gameOver && arrowsLeft > 0) {
+            arrows.push({ x: archer.x + archer.width, y: archer.y + archer.height / 2, speed: 5 });
+            arrowsLeft--;
+            if (arrowsLeft === 0) {
+                setTimeout(() => gameOver = true, 500);
+            }
+        }
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') shootArrow();
+        if (e.code === 'ArrowUp') archer.y -= 20;
+        if (e.code === 'ArrowDown') archer.y += 20;
+    });
+
+    function drawArcher() {
+        ctx.fillStyle = 'brown';
+        ctx.fillRect(archer.x - 10, archer.y - 50, 30, 150); // Tower
+        ctx.fillStyle = 'black';
+        ctx.fillRect(archer.x, archer.y, archer.width, archer.height);
+    }
+
+    function drawArrow(arrow) {
+        ctx.fillStyle = 'gray';
+        ctx.fillRect(arrow.x, arrow.y, 20, 2);
+    }
+
+    function drawBalloon(balloon) {
+        ctx.fillStyle = balloon.color;
+        ctx.beginPath();
+        ctx.ellipse(balloon.x, balloon.y, 18, 25, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'black';
+        ctx.moveTo(balloon.x, balloon.y + 25);
+        ctx.lineTo(balloon.x, balloon.y + 40);
+        ctx.stroke();
+    }
+
+    function drawHUD() {
+        ctx.fillStyle = 'black';
+        ctx.font = '20px Arial';
+        ctx.fillText('Arrows Left: ' + arrowsLeft, 20, 30);
+        ctx.fillText('Score: ' + score, 20, 60);
+        ctx.fillText('Hi Score: ' + hiScore, 20, 90);
+    }
+
+    function update() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawArcher();
+        drawHUD();
+
+        arrows.forEach(arrow => {
+            arrow.x += arrow.speed;
+            drawArrow(arrow);
+        });
+
+        balloons.forEach(balloon => {
+            balloon.y -= balloon.speed;
+            drawBalloon(balloon);
+        });
+
+        arrows.forEach(arrow => {
+            balloons.forEach(balloon => {
+                const dx = arrow.x - balloon.x;
+                const dy = arrow.y - balloon.y;
+                if (Math.sqrt(dx * dx + dy * dy) < balloon.radius) {
+                    if (!balloon.hit) {
+                        score++;
+                        hiScore = Math.max(score, hiScore);
+                        balloon.hit = true;
+                        arrow.hit = true;
+                    }
+                }
+            });
+        });
+
+        for (let i = balloons.length - 1; i >= 0; i--) {
+            if (balloons[i].hit || balloons[i].y < -20) {
+                balloons.splice(i, 1);
+            }
+        }
+
+        for (let i = arrows.length - 1; i >= 0; i--) {
+            if (arrows[i].hit || arrows[i].x > canvas.width) {
+                arrows.splice(i, 1);
+            }
+        }
+
+        if (gameOver) {
+            drawGameOver();
+            restartButton.style.display = 'block';
+        } else {
+            requestAnimationFrame(update);
+        }
+    }
+
+    function drawGameOver() {
+        ctx.fillStyle = 'black';
+        ctx.font = '48px Arial';
+        ctx.fillText('GAME OVER', canvas.width / 2 - 140, canvas.height / 2);
+    }
+
+    restartButton.addEventListener('click', () => {
+        resetGame();
+    });
+
+    resetGame();
+</script>
+</body>
+</html>
