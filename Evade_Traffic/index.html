@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3-Lane Car Evasion Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #444;
+        }
+
+        #gameContainer {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            background: #444;
+        }
+
+        #leftGround, #rightGround {
+            width: 200px;
+            height: 600px;
+            background: repeating-linear-gradient(
+                to bottom,
+                #3a7d3a,
+                #3a7d3a 40px,
+                #4caf50 40px,
+                #4caf50 80px
+            );
+            background-position-y: 0;
+            position: relative;
+        }
+
+        #gameArea {
+            width: 400px;
+            height: 600px;
+            background: black;
+            position: relative;
+            border: 3px solid #333;
+            overflow: hidden;
+        }
+
+        .lane-line {
+            position: absolute;
+            width: 4px;
+            height: 100%;
+            background: yellow;
+            top: 0;
+            z-index: 0;
+        }
+
+        .lane1 { left: 133px; }
+        .lane2 { left: 266px; }
+
+        .car {
+            width: 80px;
+            height: 150px;
+            background-image: url('main-car.png');
+            background-size: cover;
+            background-position: center;
+            position: absolute;
+            bottom: 20px;
+            left: 160px;
+            border-radius: 10px;
+            z-index: 1;
+        }
+
+        .enemyCar {
+            width: 80px;
+            height: 150px;
+            background-size: cover;
+            background-position: center;
+            position: absolute;
+            top: -150px;
+            border-radius: 10px;
+            z-index: 1;
+        }
+
+        #restartBtn {
+            display: none;
+            position: absolute;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <div id="leftGround"></div>
+
+    <div id="gameArea">
+        <div class="lane-line lane1"></div>
+        <div class="lane-line lane2"></div>
+        <div id="playerCar" class="car"></div>
+        <button id="restartBtn" onclick="restartGame()">Restart</button>
+    </div>
+
+    <div id="rightGround"></div>
+</div>
+
+<script>
+    const gameArea = document.getElementById('gameArea');
+    const playerCar = document.getElementById('playerCar');
+    const restartBtn = document.getElementById('restartBtn');
+    const leftGround = document.getElementById('leftGround');
+    const rightGround = document.getElementById('rightGround');
+
+    const lanePositions = [30, 160, 300];
+    let currentLane = 1;
+    let enemyCars = [];
+    let gameSpeed = 5;
+    let isGameOver = false;
+    let groundPosition = 0;
+    let decorations = []; // Store all trees and rocks
+    const decorationImages = ['tree.png', 'rock.png'];
+    let targetLeft = lanePositions[currentLane];
+
+
+
+    function createEnemyCar() {
+        const enemyCar = document.createElement('div');
+        enemyCar.classList.add('enemyCar');
+        const lane = Math.floor(Math.random() * 3);
+        enemyCar.style.left = lanePositions[lane] + 'px';
+        enemyCar.style.top = '-150px';
+
+        const enemyCarImages = ['taxi-car.png', 'white-car.png', 'green-car.png'];
+        const randomImage = enemyCarImages[Math.floor(Math.random() * enemyCarImages.length)];
+        enemyCar.style.backgroundImage = `url('${randomImage}')`;
+        enemyCar.style.backgroundSize = 'cover';
+        enemyCar.style.backgroundPosition = 'center';
+
+        gameArea.appendChild(enemyCar);
+        enemyCars.push({ element: enemyCar, lane: lane });
+    }
+
+    function createDecoration(sideGround) {
+        const deco = document.createElement('div');
+        deco.style.width = '70px';
+        deco.style.height = '80px';
+        deco.style.backgroundImage = `url('${decorationImages[Math.floor(Math.random() * decorationImages.length)]}')`;
+        deco.style.backgroundSize = 'cover';
+        deco.style.position = 'absolute';
+        deco.style.top = '-50px';
+
+        // Random position closer to the center of the 200px wide green area
+        const centerMin = 50;
+        const centerMax = 130;
+        const leftPosition = Math.random() * (centerMax - centerMin) + centerMin;
+        deco.style.left = `${leftPosition}px`;
+
+        sideGround.appendChild(deco);
+        decorations.push({ element: deco, parent: sideGround });
+    }
+
+
+
+    function movePlayer(direction) {
+        if (direction === 'left' && currentLane > 0) currentLane--;
+        if (direction === 'right' && currentLane < 2) currentLane++;
+        targetLeft = lanePositions[currentLane];
+    }
+
+
+    document.addEventListener('keydown', (e) => {
+        if (isGameOver) return;
+        if (e.key === 'ArrowLeft') movePlayer('left');
+        if (e.key === 'ArrowRight') movePlayer('right');
+    });
+
+    function checkCollision(enemy) {
+        const playerRect = playerCar.getBoundingClientRect();
+        const enemyRect = enemy.getBoundingClientRect();
+
+        // Shrink the rectangles a little bit to make the collision more forgiving
+        const padding = 15; // Adjust this value for more or less forgiveness
+
+        const player = {
+            top: playerRect.top + padding,
+            bottom: playerRect.bottom - padding,
+            left: playerRect.left + padding,
+            right: playerRect.right - padding
+        };
+
+        const enemyBox = {
+            top: enemyRect.top + padding,
+            bottom: enemyRect.bottom - padding,
+            left: enemyRect.left + padding,
+            right: enemyRect.right - padding
+        };
+
+        return !(player.bottom < enemyBox.top ||
+                 player.top > enemyBox.bottom ||
+                 player.right < enemyBox.left ||
+                 player.left > enemyBox.right);
+    }
+
+    function gameLoop() {
+        if (isGameOver) return;
+
+        // Move ground
+        groundPosition += gameSpeed;
+        leftGround.style.backgroundPositionY = `${groundPosition}px`;
+        rightGround.style.backgroundPositionY = `${groundPosition}px`;
+
+
+        // Randomly add decorations
+        if (Math.random() < 0.05) createDecoration(leftGround);
+        if (Math.random() < 0.05) createDecoration(rightGround);
+
+        // Move decorations
+        decorations.forEach((decoObj, index) => {
+            const deco = decoObj.element;
+            const currentTop = parseFloat(deco.style.top);
+            deco.style.top = `${currentTop + gameSpeed}px`;
+            if (currentTop > 600) {
+                decoObj.parent.removeChild(deco);
+                decorations.splice(index, 1);
+            }
+        });
+
+
+        // Move enemy cars
+        enemyCars.forEach((carObj, index) => {
+            const car = carObj.element;
+            car.style.top = (parseInt(car.style.top) + gameSpeed) + 'px';
+            if (parseInt(car.style.top) > 600) {
+                gameArea.removeChild(car);
+                enemyCars.splice(index, 1);
+            }
+            if (checkCollision(car)) {
+                isGameOver = true;
+                restartBtn.style.display = 'block';
+            }
+        });
+        // Smooth player car movement
+        let currentLeft = parseFloat(playerCar.style.left);
+        const diff = targetLeft - currentLeft;
+        if (Math.abs(diff) > 1) {
+            playerCar.style.left = `${currentLeft + diff * 0.1}px`; // Smooth factor
+        } else {
+            playerCar.style.left = `${targetLeft}px`;
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function startSpawning() {
+        setInterval(() => {
+            if (!isGameOver) createEnemyCar();
+        }, 1500);
+    }
+
+    function restartGame() {
+        enemyCars.forEach(carObj => gameArea.removeChild(carObj.element));
+        enemyCars = [];
+        currentLane = 1;
+        playerCar.style.left = lanePositions[currentLane] + 'px';
+        isGameOver = false;
+        restartBtn.style.display = 'none';
+        groundPosition = 0;
+        leftGround.style.backgroundPositionY = `0px`;
+        rightGround.style.backgroundPositionY = `0px`;
+        // Clear decorations
+        decorations.forEach(decoObj => decoObj.parent.removeChild(decoObj.element));
+        decorations = [];
+
+        gameLoop();
+    }
+
+    startSpawning();
+    gameLoop();
+</script>
+
+</body>
+</html>
