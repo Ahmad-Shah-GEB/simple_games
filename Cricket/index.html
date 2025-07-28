@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lord's Cricket Field</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #e5e5e5;
+      margin: 0;
+    }
+    #container {
+      display: flex;
+      align-items: center; /* already correct */
+      justify-content: center;
+      gap: 40px;
+    }
+
+    #rightPanel {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      height: 800px; /* same as canvas height */
+    }
+
+    #messageContainer {
+      margin-top: 20px;
+      padding: 10px;
+      width: 250px;
+      text-align: center;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      font-weight: normal;
+      font-family: serif;
+    }
+
+    #deliveryPopup {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      grid-gap: 10px;
+      padding: 20px;
+      background-color: rgba(255, 255, 255, 0.5);
+      border: 2px solid black;
+      position: absolute;
+      top: 550px; /* below canvas */
+      left: 43.8%;
+      transform: translateX(-50%);
+      z-index: 1000;
+    }
+    #deliveryPopup button {
+      padding: 20px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #shotPopup {
+      display: grid;
+      grid-template-columns: repeat(4, 120px);
+      grid-gap: 10px;
+      padding: 20px;
+      background-color: rgba(255, 255, 255, 0.5);
+      border: 2px solid black;
+      position: absolute;
+      top: 580px; /* position it under deliveryPopup */
+      left: 43.8%;
+      transform: translateX(-50%);
+      z-index: 1000;
+    }
+    #shotPopup button {
+      padding: 10px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+
+
+    canvas {
+      background-color: #85C226;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    }
+    #controls {
+      font-family: Arial, sans-serif;
+    }
+    label {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <canvas id="cricketField" width="700" height="800"></canvas>
+
+    <div id="rightPanel">
+      <div id="scoreboard" style="margin-bottom: 20px; font-family: Arial, sans-serif; text-align: left;">
+        <p><strong>Score:</strong> <span id="runs">0</span> / <span id="wickets">0</span></p>
+        <p><strong>Overs:</strong> <span id="overs">0</span>.<span id="balls">0</span></p>
+      </div>
+
+      <div id="controls">
+        <label>Field Setup:</label><br>
+        <select id="fieldSelect">
+          <option value="attacking">Attacking</option>
+          <option value="Normal">Normal</option>
+          <option value="defensive">Defensive</option>
+        </select>
+        <br><br>
+        <button onclick="showPopup()">Start Bowling</button>
+      </div>
+
+      <div id="messageContainer">
+        <p id="deliveryResult"></p>
+      </div>
+    </div>
+  </div>
+ <!-- end of #container -->
+
+    <!-- Message container placed OUTSIDE of the flex container -->
+
+
+
+
+
+    <div id="deliveryPopup" style="display: none;">
+      <button data-value="full-outside off">Full - Out Off</button>
+      <button data-value="full-off">Full - Off</button>
+      <button data-value="full-middle">Full - Mid</button>
+      <button data-value="good-outside off">Good - Out Off</button>
+      <button data-value="good-off">Good - Off</button>
+      <button data-value="good-middle">Good - Mid</button>
+      <button data-value="short-outside off">Short - Out Off</button>
+      <button data-value="short-off">Short - Off</button>
+      <button data-value="short-middle">Short - Mid</button>
+  <!-- 3x3 grid goes here -->
+    </div>
+
+    <div id="shotPopup" style="display: none;">
+      <button data-shot="leave">Leave Alone</button>
+      <button data-shot="block">Block</button>
+      <button data-shot="defensive">Defensive Shot</button>
+      <button data-shot="ground">Ground Shot</button>
+      <button data-shot="lofted">Lofted Shot</button>
+      <button data-shot="adv-ground">Advanced Ground Shot</button>
+      <button data-shot="adv-lofted">Advanced Lofted Shot</button>
+      <button data-shot="unorthodox">Unorthodox Shot</button>
+    </div>
+
+
+
+
+
+  <script>
+    const canvas = document.getElementById('cricketField');
+    const ctx = canvas.getContext('2d');
+
+    const scale = 0.2;
+    const fieldLength = 150 / scale;
+    const fieldWidth = 135 / scale;
+    const pitchLength = 20.12 / scale;
+    const pitchWidth = 4.55 / scale;
+    const deliverySuccessRates = {
+      'full-outside off': 30,
+      'full-off': 20,
+      'full-middle': 10,
+      'good-outside off': 60,
+      'good-off': 70,
+      'good-middle': 30,
+      'short-outside off': 50,
+      'short-off': 40,
+      'short-middle': 20
+    };
+
+
+    const fielders = [];
+    let totalRuns = 0;
+    let totalWickets = 0;
+    let ballsBowled = 0;
+
+
+    const fieldSetups = {
+      attacking: [
+        { x: 340, y: 310, fixed: false, role: 'slip1' }, //x: 340, y: 310,
+        { x: 330, y: 320, fixed: false, role: 'slip2' },
+        { x: 320, y: 325, fixed: false, role: 'slip3' },
+        { x: 300, y: 340, fixed: false, role: 'gully' },
+        { x: 230, y: 360, fixed: false, role: 'point' },
+        { x: 270, y: 450, fixed: false, role: 'cover point' },
+        { x: 430, y: 450, fixed: false, role: 'mid-on' },
+        { x: 460, y: 360, fixed: false, role: 'square leg' },
+        { x: 530, y: 120, fixed: false, role: 'fine leg' }
+      ],
+      Normal: [
+        { x: 150, y: 130, fixed: false, role: 'third-man' },
+        { x: 230, y: 360, fixed: false, role: 'point' },
+        { x: 40, y: 410, fixed: false, role: 'deep point-cover' },
+        { x: 250, y: 420, fixed: false, role: 'cover' },
+        { x: 280, y: 480, fixed: false, role: 'mid off' },
+        { x: 420, y: 480, fixed: false, role: 'mid on' },
+        { x: 450, y: 410, fixed: false, role: 'mid wicket' },
+        { x: 660, y: 340, fixed: false, role: 'deep square leg' },
+        { x: 530, y: 120, fixed: false, role: 'fine leg' }
+      ],
+      defensive: [
+        { x: 150, y: 130, fixed: false, role: 'third-man' }, //        { x: 150, y: 130, fixed: false, role: 'third-man' },
+        { x: 230, y: 360, fixed: false, role: 'point' },
+        { x: 40, y: 410, fixed: false, role: 'deep point-cover' },
+        { x: 240, y: 470, fixed: false, role: 'cover' },
+        { x: 280, y: 530, fixed: false, role: 'long off' },
+        { x: 460, y: 730, fixed: false, role: 'long on' },
+        { x: 640, y: 540, fixed: false, role: 'deep mid wicket' },
+        { x: 660, y: 340, fixed: false, role: 'deep square leg' },
+        { x: 430, y: 260, fixed: false, role: 'shot fine leg' }
+      ]
+
+    };
+
+    const fieldRegions = {
+      "slip1": { x: 340, y: 310 },
+      "slip2": { x: 330, y: 320 },
+      "slip3": { x: 320, y: 325 },
+      "slip4": { x: 310, y: 330 },
+      "gully": { x: 300, y: 340 },
+      "point": { x: 230, y: 360 },
+      "short-third-man": { x: 250, y: 240 },
+      "deep-backward-point": { x: 70, y: 230 },
+      "deep-point": { x: 35, y: 360 },
+      "cover-point": { x: 270, y: 450 },
+      "deep-cover-point": { x: 40, y: 430,},
+      "deep-cover": { x: 60, y: 550},
+      "extra-cover": { x: 230, y: 460},
+      "deep-extra-cover": { x: 85, y: 590},
+      "short-mid-on": { x: 430, y: 450 },
+      "square-leg": { x: 460, y: 360 },
+      "fine-leg": { x: 530, y: 120 },
+      "deep-fine-leg": { x: 450, y: 70 },
+      "long-stop": { x: 350, y: 50 },
+      "third-man": { x: 150, y: 130 },
+      "fine-third-man": { x: 250, y: 60 },
+      "cover": { x: 250, y: 420 },
+      "mid-off": { x: 280, y: 480 },
+      "straightish-mid-off": { x: 300, y: 520 },
+      "mid-on": { x: 430, y: 450 },
+      "straightish-mid-on": { x: 400, y: 520 },
+      "mid-wicket": { x: 450, y: 410 },
+      "deep-square leg": { x: 660, y: 340 },
+      "long-off": {  x: 215, y: 720 },
+      "straightish-long-off": { x: 290, y: 745 },
+      "straightish-long-on": { x: 410, y: 750 },
+      "long-on": { x: 460, y: 730 },
+      "deep-mid-wicket": { x: 640, y: 540 },
+      "shot-fine-leg": { x: 430, y: 260 }
+    };
+
+
+    const shotSuccessRates = {
+      leave: {
+        "Good-full-outside off": 100,
+        "Bad-full-outside off": 100,
+        "Good-good-outside off": 98,
+        "Bad-good-outside off": 100,
+        "Good-short-outside off": 90,
+        "Bad-short-outside off": 98,
+        "Good-full-off": 30,
+        "Bad-full-off": 70,
+        "Good-good-off": 20,
+        "Bad-good-off": 70,
+        "Good-short-off": 70,
+        "Bad-short-off": 90,
+        "Good-full-middle": 20,
+        "Bad-full-middle": 40,
+        "Good-good-middle": 30,
+        "Bad-good-middle": 50,
+        "Good-short-middle": 70,
+        "Bad-short-middle": 95
+      },
+      block: {
+        "Good-full-outside off": 60,
+        "Bad-full-outside off": 90,
+        "Good-good-outside off": 40,
+        "Bad-good-outside off": 70,
+        "Good-short-outside off": 40,
+        "Bad-short-outside off": 60,
+        "Good-full-off": 60,
+        "Bad-full-off": 90,
+        "Good-good-off": 80,
+        "Bad-good-off": 95,
+        "Good-short-off": 50,
+        "Bad-short-off": 80,
+        "Good-full-middle": 70,
+        "Bad-full-middle": 90,
+        "Good-good-middle": 85,
+        "Bad-good-middle": 95,
+        "Good-short-middle": 80,
+        "Bad-short-middle": 95  // You'll fill these in similarly
+      },
+      defensive: {
+        "Good-full-outside off": 80,
+        "Bad-full-outside off": 95,
+        "Good-good-outside off": 65,
+        "Bad-good-outside off": 90,
+        "Good-short-outside off": 70,
+        "Bad-short-outside off": 90,
+        "Good-full-off": 50,
+        "Bad-full-off": 80,
+        "Good-good-off": 40,
+        "Bad-good-off": 70,
+        "Good-short-off": 40,
+        "Bad-short-off": 90,
+        "Good-full-middle": 70,
+        "Bad-full-middle": 85,
+        "Good-good-middle": 75,
+        "Bad-good-middle": 90,
+        "Good-short-middle": 70,
+        "Bad-short-middle": 90        // ...
+      },
+    // ... and so on for all 8 shot types
+    ground: {
+      "Good-full-outside off": 60,
+      "Bad-full-outside off": 95,
+      "Good-good-outside off": 50,
+      "Bad-good-outside off": 90,
+      "Good-short-outside off": 30,
+      "Bad-short-outside off": 80,
+      "Good-full-off": 30,
+      "Bad-full-off": 80,
+      "Good-good-off": 20,
+      "Bad-good-off": 60,
+      "Good-short-off": 30,
+      "Bad-short-off": 80,
+      "Good-full-middle": 75,
+      "Bad-full-middle": 95,
+      "Good-good-middle": 75,
+      "Bad-good-middle": 90,
+      "Good-short-middle": 60,
+      "Bad-short-middle": 90        // ...
+    },
+
+    lofted: {
+      "Good-full-outside off": 20,
+      "Bad-full-outside off": 50,
+      "Good-good-outside off": 15,
+      "Bad-good-outside off": 40,
+      "Good-short-outside off": 10,
+      "Bad-short-outside off": 75,
+      "Good-full-off": 15,
+      "Bad-full-off": 40,
+      "Good-good-off": 20,
+      "Bad-good-off": 35,
+      "Good-short-off": 10,
+      "Bad-short-off": 60,
+      "Good-full-middle": 30,
+      "Bad-full-middle": 70,
+      "Good-good-middle": 25,
+      "Bad-good-middle": 60,
+      "Good-short-middle": 20,
+      "Bad-short-middle": 55        // ...
+    },
+
+    "adv-ground": {
+      "Good-full-outside off": 20,
+      "Bad-full-outside off": 60,
+      "Good-good-outside off": 10,
+      "Bad-good-outside off": 30,
+      "Good-short-outside off": 30,
+      "Bad-short-outside off": 55,
+      "Good-full-off": 70,
+      "Bad-full-off": 90,
+      "Good-good-off": 60,
+      "Bad-good-off": 90,
+      "Good-short-off": 80,
+      "Bad-short-off": 95,
+      "Good-full-middle": 60,
+      "Bad-full-middle": 90,
+      "Good-good-middle": 80,
+      "Bad-good-middle": 95,
+      "Good-short-middle": 80,
+      "Bad-short-middle": 95        // ...
+    },
+
+    "adv-lofted": {
+      "Good-full-outside off": 10,
+      "Bad-full-outside off": 40,
+      "Good-good-outside off": 5,
+      "Bad-good-outside off": 20,
+      "Good-short-outside off": 20,
+      "Bad-short-outside off": 40,
+      "Good-full-off": 60,
+      "Bad-full-off": 90,
+      "Good-good-off": 55,
+      "Bad-good-off": 80,
+      "Good-short-off": 50,
+      "Bad-short-off": 90,
+      "Good-full-middle": 30,
+      "Bad-full-middle": 60,
+      "Good-good-middle": 40,
+      "Bad-good-middle": 60,
+      "Good-short-middle": 40,
+      "Bad-short-middle": 70       // ...
+    },
+    unorthodox: {
+      "Good-full-outside off": 10,
+      "Bad-full-outside off": 40,
+      "Good-good-outside off": 10,
+      "Bad-good-outside off": 30,
+      "Good-short-outside off": 10,
+      "Bad-short-outside off": 30,
+      "Good-full-off": 10,
+      "Bad-full-off": 45,
+      "Good-good-off": 30,
+      "Bad-good-off": 50,
+      "Good-short-off": 10,
+      "Bad-short-off": 20,
+      "Good-full-middle": 10,
+      "Bad-full-middle": 40,
+      "Good-good-middle": 30,
+      "Bad-good-middle": 60,
+      "Good-short-middle": 20,
+      "Bad-short-middle": 50
+    }
+
+    };
+
+
+    const shotSuccessOutcomes = {
+      leave: {
+        "Good-full-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Bad-full-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Good-good-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Bad-good-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Good-short-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Bad-short-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Good-full-off": "Batter leaves alone the ball, it barely misses the stumps! Scored run = 0",
+        "Bad-full-off": "Batter leaves alone the ball, it barely misses the stumps! Scored run = 0",
+        "Good-good-off": "Batter leaves alone the ball, it barely misses the stumps! Scored run = 0",
+        "Bad-good-off": "Batter leaves alone the ball, it barely misses the stumps! Scored run = 0",
+        "Good-short-off": "Batter barely ducks under the ball! Well Directed Bouncer! Scored run = 0",
+        "Bad-short-off": "Batter easily ducks under the ball. Scored run = 0",
+        "Good-full-middle": "Batter pads up the ball, Huge Shout! But wicket's missing! Scored run = 0",
+        "Bad-full-middle": "Batter pads up the ball, Muted shout. Scored run = 0",
+        "Good-good-middle": "Batter pads up the ball, Huge Shout! But wicket's missing! Scored run = 0",
+        "Bad-good-middle": "Batter pads up the ball, Huge Shout! But wicket's missing! Scored run = 0",
+        "Good-short-middle": "Batter barely ducks under the ball! Good Bouncer! Scored run = 0",
+        "Bad-short-middle": "Batter lets the ball go to the wicketkeeper. Scored run = 0"
+      },
+      block: {
+        "Good-full-outside off": "Batter blocks the ball. Almost a yorker! Scored run = 0",
+        "Bad-full-outside off": "Batter blocks the ball, Scored run = 0",
+        "Good-good-outside off": "Batter blocks the ball, Scored run = 0",
+        "Bad-good-outside off": "Batter blocks the ball, Scored run = 0",
+        "Good-short-outside off": "Batter blocks the ball, Scored run = 0",
+        "Bad-short-outside off": "Batter blocks the ball, Scored run = 0",
+        "Good-full-off": "Batter blocks the yorker! Scored run = 0",
+        "Bad-full-off": "Batter blocks the full pitch delivery! Scored run = 0",
+        "Good-good-off": "Batter blocks the ball. Good defense! Scored run = 0",
+        "Bad-good-off": "Batter blocks the ball confidently. Scored run = 0",
+        "Good-short-off": "Batter blocks the ball on backfoot. Well played! Scored run = 0",
+        "Bad-short-off": "Batter blocks the ball on backfoot. Scored run = 0",
+        "Good-full-middle": "Batter blocks the yorker! Scored run = 0",
+        "Bad-full-middle": "Batter blocks the ball. Scored run = 0",
+        "Good-good-middle": "Batter blocks the ball. Scored run = 0",
+        "Bad-good-middle": "Batter blocks the ball. Scored run = 0",
+        "Good-short-middle": "Batter blocks the ball on backfoot. Scored run = 0",
+        "Bad-short-middle": "Batter blocks the ball on backfoot. Scored run = 0"
+      },
+      defensive: {
+        "Good-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Bad-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Good-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Bad-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Good-short-middle": "Batter pushes the ball towards the square-leg region. {output}",
+        "Bad-short-middle": "Batter pushes the ball towards the square-leg region. {output}"
+      },
+      ground: {
+        "Good-full-outside off": "Batter drives the ball towards the deep-cover region. {output}",
+        "Bad-full-outside off": "Batter drives the ball towards the deep-extra-cover region. {output}",
+        "Good-good-outside off": "Batter drives on the up the ball towards the deep-cover-point region. {output}",
+        "Bad-good-outside off": "Batter square drives towards the deep-point region. {output}",
+        "Good-short-outside off": "Batter cuts the ball towards the third-man region. {output}",
+        "Bad-short-outside off": "Batter square cuts the ball towards the deep-point region. {output}",
+        "Good-full-off": "Batter drives the ball towards the long-off region. {output}",
+        "Bad-full-off": "Batter drives the ball towards the straightish-long-off region. {output}",
+        "Good-good-off": "Batter drives the ball towards the long-on region. {output}",
+        "Bad-good-off": "Batter drives the ball towards the straightish-long-on region. {output}",
+        "Good-short-off": "Batter pulls the ball towards the deep-square-leg region. {output}",
+        "Bad-short-off": "Batter pulls the ball towards the deep-mid-wicket region. {output}",
+        "Good-full-middle": "Batter glances the ball towards the fine-leg region. {output}",
+        "Bad-full-middle": "Batter glances the ball towards the deep-fine-leg region. {output}",
+        "Good-good-middle": "Batter glances the ball towards the long-leg region. {output}",
+        "Bad-good-middle": "Batter flicks the ball towards the deep-square-leg region. {output}",
+        "Good-short-middle": "Batter hooks the ball towards the fine-leg region. {output}",
+        "Bad-short-middle": "Batter hooks the ball towards the long-leg region. {output}"
+      },
+      lofted: {
+        "Good-full-outside off": "Batter lofts the ball towards the deep-cover region. {output}",
+        "Bad-full-outside off": "Batter lofts the ball towards the deep-extra-cover region. {output}",
+        "Good-good-outside off": "Batter plays an inside-out shot towards the deep-cover-point region. {output}",
+        "Bad-good-outside off": "Batter plays an inside-out shot towards the deep-extra-cover region. {output}",
+        "Good-short-outside off": "Batter upper cuts the ball towards the third-man region. {output}",
+        "Bad-short-outside off": "Batter upper cuts the ball towards the deep-backward-point region. {output}",
+        "Good-full-off": "Batter lofts the ball towards the long-off region. {output}",
+        "Bad-full-off": "Batter lofts the ball towards the straightish-long-off region. {output}",
+        "Good-good-off": "Batter lofts the ball towards the long-on region. {output}",
+        "Bad-good-off": "Batter lofts the ball towards the straightish-long-on region. {output}",
+        "Good-short-off": "Batter plays lofted pull towards the deep-square-leg region. {output}",
+        "Bad-short-off": "Batter plays lofted pull towards the deep-mid-wicket region. {output}",
+        "Good-full-middle": "Batter plays lofted glance towards the fine-leg region. {output}",
+        "Bad-full-middle": "Batter plays lofted glance towards the long-leg region. {output}",
+        "Good-good-middle": "Batter plays lofted glance the deep-square-leg region. {output}",
+        "Bad-good-middle": "Batter flicks the ball towards the deep-mid-wicket region. {output}",
+        "Good-short-middle": "Batter plays lofted hook towards the fine-leg region. {output}",
+        "Bad-short-middle": "Batter plays lofted hook towards the long-leg region. {output}"
+      },
+      "adv-ground": {
+        "Good-full-outside off": "Batter advances out and drives the ball towards the deep-cover region. {output}",
+        "Bad-full-outside off": "Batter advances out and drives the ball towards the deep-extra-cover region. {output}",
+        "Good-good-outside off": "Batter advances out and drives on the up the ball towards the deep-cover-point region. {output}",
+        "Bad-good-outside off": "Batter advances out and drives on the up the ball towards the deep-extra-cover-point region. {output}",
+        "Good-short-outside off": "Batter advances out and cut the ball towards the third-man region. {output}",
+        "Bad-short-outside off": "Batter advances out and square cuts the ball towards the deep-point region. {output}",
+        "Good-full-off": "Batter advances out and drives the ball towards the long-off region. {output}",
+        "Bad-full-off": "Batter advances out and drives the ball towards the straight region. {output}",
+        "Good-good-off": "Batter advances out and drives the ball towards the long-on region. {output}",
+        "Bad-good-off": "Batter advances out and drives the ball towards the deep-mid-wicket region. {output}",
+        "Good-short-off": "Batter advances out and pulls the ball towards the deep-square-leg region. {output}",
+        "Bad-short-off": "Batter advances out and pulls the ball towards the deep-mid-wicket region. {output}",
+        "Good-full-middle": "Batter advances out and glances the ball towards the fine-leg region. {output}",
+        "Bad-full-middle": "Batter advances out and glances the ball towards the deep-fine-leg region. {output}",
+        "Good-good-middle": "Batter advances out and glances the ball towards the long-leg region. {output}",
+        "Bad-good-middle": "Batter advances out and flicks the ball towards the deep-square-leg region. {output}",
+        "Good-short-middle": "Batter advances out and hooks the ball towards the fine-leg region. {output}",
+        "Bad-short-middle": "Batter advances out and hooks the ball towards the long-leg region. {output}"
+      },
+      "adv-lofted": {
+        "Good-full-outside off": "Batter advances out and  lofts the ball towards the deep-cover region. {output}",
+        "Bad-full-outside off": "Batter advances out and lofts the ball towards the deep-extra-cover region. {output}",
+        "Good-good-outside off": "Batter advances out and plays an inside-out shot towards the deep-cover-point region. {output}",
+        "Bad-good-outside off": "Batter advances out and plays an inside-out shot towards the deep-extra-cover region. {output}",
+        "Good-short-outside off": "Batter advances out and upper cuts the ball towards the third-man region. {output}",
+        "Bad-short-outside off": "Batter advances out and upper cuts the ball towards the deep-backward-point region. {output}",
+        "Good-full-off": "Batter advances out and lofts the ball towards the long-off region. {output}",
+        "Bad-full-off": "Batter advances out and lofts the ball towards the straightish-long-off region. {output}",
+        "Good-good-off": "Batter advances out and lofts the ball towards the long-on region. {output}",
+        "Bad-good-off": "Batter advances out and lofts the ball towards the straightish-long-on region. {output}",
+        "Good-short-off": "Batter advances out and plays lofted pull towards the deep-square-leg region. {output}",
+        "Bad-short-off": "Batter advances out and plays lofted pull towards the deep-mid-wicket region. {output}",
+        "Good-full-middle": "Batter advances out and plays lofted glance towards the fine-leg region. {output}",
+        "Bad-full-middle": "Batter advances out and plays lofted glance towards the long-leg region. {output}",
+        "Good-good-middle": "Batter advances out and plays lofted glance the deep-square-leg region. {output}",
+        "Bad-good-middle": "Batter advances out and flicks the ball towards the deep-mid-wicket region. {output}",
+        "Good-short-middle": "Batter advances out and plays lofted hook towards the fine-leg region. {output}",
+        "Bad-short-middle": "Batter advances out and plays lofted hook towards the long-leg region. {output}"
+      },
+      unorthodox: {
+        "Good-full-outside off": "Batter steers the ball towards the deep-backward-point region. {output}",
+        "Bad-full-outside off": "Batter guides the ball towards the fine-third-man region. {output}",
+        "Good-good-outside off": "Batter lofts up the ball towards the third-man region. {output}",
+        "Bad-good-outside off": "Batter lofts up the ball towards the fine-third-man region. {output}",
+        "Good-short-outside off": "Batter lofts up the ball towards the fine-third-man region. {output}",
+        "Bad-short-outside off": "Batter plays the lofted upper cut towards the third-man region. Scored run = 6",
+        "Good-full-off": "Batter reverse scoops the ball towards the third-man region. {output}",
+        "Bad-full-off": "Batter reverse scoops the ball towards the fine-third-man region. {output}",
+        "Good-good-off": "Batter scoops the ball towards the fine-leg region. {output}",
+        "Bad-good-off": "Batter plays lofted scoops towards the fine-leg region. Scored run = 6",
+        "Good-short-off": "Batter plays periscope shot towards the long-stop region. {output}",
+        "Bad-short-off": "Batter plays lofted periscope shot towards the long-stop region. Scored run = 6",
+        "Good-full-middle": "Batter scoops the ball towards the fine-leg region. {output}",
+        "Bad-full-middle": "Batter scoops the ball towards the deep-fine-leg region. {output}",
+        "Good-good-middle": "Batter plays Dilscoop towards the deep-fine-leg region. {output}",
+        "Bad-good-middle": "Batter plays lofted Dilscoop towards the deep-square-leg region. Scored run = 6",
+        "Good-short-middle": "Batter plays Dilscoop towards the long-stop region. {output}",
+        "Bad-short-middle": "Batter plays Dilscoop towards the long-stop region. Scored run = 6",
+      }
+    };
+
+    const shotFailureOutcomes = {
+      leave: {
+        "Good-full-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Bad-full-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Good-good-outside off": "Batter is late to leave the ball. Edge! and OUT! Scored run = 0",
+        "Bad-good-outside off": "Batter leaves alone the ball. Scored run = 0",
+        "Good-short-outside off": "Batter is late to shoulder his bat away! Edge and gone. OUT! Scored run = 0",
+        "Bad-short-outside off": "Batter shoulders his bat away. Scored run = 0",
+        "Good-full-off": "Batter tries to leave the ball alone, but it strucks to the off-stump. Gone! OUT! Scored run = 0",
+        "Bad-full-off": "Batter tries to leave the ball alone, but it strucks to the front pad. Umpired gives OUT! Scored run = 0",
+        "Good-good-off": "Batter tries to leave the ball alone, but it strucks to the off-stump. Off-Stump goes for Cartwheeling! OUT! Scored run = 0",
+        "Bad-good-off": "Batter tries to leave the ball alone, but it strucks to the front pad. Umpired gives OUT! Scored run = 0",
+        "Good-short-off": "Batter fails to evade the bouncer. Edge and gone. OUT! Scored run = 0",
+        "Bad-short-off": "Batter fails to duck in a timely manner. Strucks the helmet! Batter is down! Scored run = 0",
+        "Good-full-middle": "Batter shoulders the arm. Hits to the pads. Huge Shout! And Given! OUT! Scored run = 0",
+        "Bad-full-middle": "Batter shoulders the arm. Hits to the pads. Huge Shout! Oh, umpire thinks it may miss leg stump! Lucky Escape! Scored run = 0",
+        "Good-good-middle": "Batter pads up the ball, Huge Shout! And Given! OUT! Scored run = 0",
+        "Bad-good-middle": "Batter pads up the ball, Hits to the pads. Huge Shout! Oh, umpire thinks it may miss leg stump! Lucky Escape! Scored run = 0",
+        "Good-short-middle": "Batter fails to evade the bouncer. Edge and gone. OUT! Scored run = 0",
+        "Bad-short-middle": "Batter fails to duck in a timely manner. Strucks the helmet! Batter is down! Scored run = 0",
+      },
+      block: {
+        "Good-full-outside off": "Batter tries to defend. Edges towards slip region. {output}",
+        "Bad-full-outside off": "Batter tries to defend. Narrowly escapes the edge! Lucky! Scored run = 0",
+        "Good-good-outside off": "Batter tries to defend. Edges towards slip region. {output}",
+        "Bad-good-outside off": "Batter tries to defend. Narrowly escapes the edge! Lucky! Scored run = 0",
+        "Good-short-outside off": "Batter tries to defend on back foot. Edges towards slip region. {output}",
+        "Bad-short-outside off": "Batter tries to defend on back foot. Narrowly escapes the edge! Lucky! Scored run = 0",
+        "Good-full-off": "Batter tries to defend. Plays to the wrong line. Stump is uprooted! OUT! Scored run = 0",
+        "Bad-full-off": "Batter tries to defend. Somehow digs it out! Lucky! Scored run = 0",
+        "Good-good-off": "Batter tries to defend but it strucks the pad. Huge shout and given! OUT! Scored run = 0",
+        "Bad-good-off": "Batter tries to defend but it strucks the pad. Huge shout! Probably some inside edge saved the batter. Lucky escape! Scored run = 0",
+        "Good-short-off": "Batter tries to defend but it strucks his gloves. Ball loops out towards forward-short-leg. {output}",
+        "Bad-short-off": "Batter tries to defend but it strucks his gloves. Ball lands safely. Lucky! Scored run = 0",
+        "Good-full-middle": "Batter tries to defend but misses the bowl. Hits the toes. Huge Appeal! And Umpire gives it OUT! Scored run = 0",
+        "Bad-full-middle": "Batter tries to defend but misses the bowl. Hits the toes. Huge Appeal! But umpire thinks it is missing leg! Lucky! Scored run = 0",
+        "Good-good-middle": "Batter tries to defend but it strucks the pad. Huge Shout! And Umpire gives it OUT! Scored run = 0",
+        "Bad-good-middle": "Batter tries to defend but it strucks the pad. Huge Shout! But umpire thinks it is missing leg! Lucky! Scored run = 0",
+        "Good-short-middle": "Batter tries to defend but it strucks his gloves. Ball loops out towards forward-short-leg. {output}",
+        "Bad-short-middle": "Batter tries to defend but it strucks his gloves. Ball lands safely. Lucky! Scored run = 0",
+      },
+      defensive: {
+        "Good-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Bad-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Good-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Bad-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Good-short-middle": "Batter pushes the ball towards the square-leg region. {output}",
+        "Bad-short-middle": "Batter pushes the ball towards the square-leg region. {output}"
+      },
+      ground: {
+        "Good-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Bad-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Good-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Bad-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Good-short-middle": "Batter pushes the ball towards the square-leg region. {output}",
+        "Bad-short-middle": "Batter pushes the ball towards the square-leg region. {output}"
+      },
+      lofted: {
+        "Good-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Bad-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Good-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Bad-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Good-short-middle": "Batter pushes the ball towards the square-leg region. {output}",
+        "Bad-short-middle": "Batter pushes the ball towards the square-leg region. {output}"
+      },
+      "adv-ground": {
+        "Good-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Bad-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Good-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Bad-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Good-short-middle": "Batter pushes the ball towards the square-leg region. {output}",
+        "Bad-short-middle": "Batter pushes the ball towards the square-leg region. {output}"
+      },
+      "adv-lofted": {
+        "Good-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Bad-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Good-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Bad-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Good-short-middle": "Batter pushes the ball towards the square-leg region. {output}",
+        "Bad-short-middle": "Batter pushes the ball towards the square-leg region. {output}"
+      },
+      unorthodox: {
+        "Good-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-full-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-good-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Bad-short-outside off": "Batter pushes the ball towards the cover region. {output}",
+        "Good-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-full-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-good-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Bad-short-off": "Batter pushes the ball towards the mid-off region. {output}",
+        "Good-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Bad-full-middle": "Batter pushes the ball towards the mid-on region. {output}",
+        "Good-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Bad-good-middle": "Batter pushes the ball towards the mid-wicket region. {output}",
+        "Good-short-middle": "Batter pushes the ball towards the square-leg region. {output}",
+        "Bad-short-middle": "Batter pushes the ball towards the square-leg region. {output}"
+      }
+    };
+
+    fielders.push(
+      { x: canvas.width / 2, y: (canvas.height - pitchLength) / 2 - 30, fixed: true, role: 'bowler' },
+      { x: canvas.width / 2, y: (canvas.height + pitchLength) / 2 + 30, fixed: true, role: 'keeper' }
+    );
+
+    function drawCatchAttempt(x, y, color = "yellow") {
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function drawEdgeToEllipseBoundary(targetX, targetY) {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const rx = (fieldWidth / 2) - 5;    // ellipse x-radius (white perimeter)
+      const ry = (fieldLength / 2) - 5;   // ellipse y-radius (white perimeter)
+
+      const startX = cx;
+      const startY = cy - pitchLength / 2;  // pitch top
+      const dx = targetX - startX;
+      const dy = targetY - startY;
+
+      // Normalize direction vector
+      const length = Math.hypot(dx, dy);
+      const ux = dx / length;
+      const uy = dy / length;
+
+      // Intersection with ellipse: scale such that (x^2 / rx^2 + y^2 / ry^2) = 1
+      const scale = 1 / Math.sqrt((ux * ux) / (rx * rx) + (uy * uy) / (ry * ry));
+      const endX = startX + ux * scale;
+      const endY = startY + uy * scale;
+
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.strokeStyle = "yellow";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+
+
+
+
+    function calculateRunFromDefensiveShot(key, fieldRegions, fielders) {
+      const regionMatch = shotSuccessOutcomes["defensive"][key]; // get text
+      const regionNameMatch = regionMatch.match(/towards the (.+?) region/);
+      const regionName = regionNameMatch ? regionNameMatch[1] : null;
+
+      if (!regionName || !fieldRegions[regionName]) {
+        console.warn("Unknown region:", regionName);
+        return { runs: 0, out: false, outputText: "Scored run = <strong>0</strong>" };
+      }
+
+      const pitchTopX = canvas.width / 2;
+      const pitchTopY = canvas.height / 2 - pitchLength / 2;
+
+      const target = fieldRegions[regionName];
+
+      // Draw the yellow shot line
+      ctx.beginPath();
+      ctx.strokeStyle = "yellow";
+      ctx.lineWidth = 2;
+      ctx.moveTo(pitchTopX, pitchTopY);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+
+      // Check distance to all fielders
+      let closestDistance = Infinity;
+      for (const fielder of fielders) {
+        const d = Math.hypot(fielder.x - target.x, fielder.y - target.y);
+        if (d < closestDistance) closestDistance = d;
+      }
+
+      const run = closestDistance < 50 ? 0 : 1;
+      return {
+        runs: run,
+        out: false,
+        outputText: `Scored run = <strong>${run}</strong>`
+      };
+    }
+
+    function checkSlipCatch(fielders, fieldRegions) {
+      const slips = ['slip1', 'slip2', 'slip3', 'slip4'];
+      const chosenSlip = slips[Math.floor(Math.random() * slips.length)];
+      const slipTarget = fieldRegions[chosenSlip];
+      const pitchX = canvas.width / 2;
+      const pitchY = canvas.height / 2 - pitchLength / 2;
+
+      let fielderExactlyAtSlip = false;
+
+      for (const fielder of fielders) {
+        const d = Math.hypot(fielder.x - slipTarget.x, fielder.y - slipTarget.y);
+        if (d < 2) {
+          fielderExactlyAtSlip = true;
+          break;
+        }
+      }
+
+      if (fielderExactlyAtSlip) {
+        drawCatchAttempt(slipTarget.x, slipTarget.y);
+        return {
+          caught: true,
+          runs: 0,
+          out: true,
+          outputText: `Ball edges towards <strong>${chosenSlip}</strong>. Caught by ${chosenSlip.toUpperCase()}! <strong>OUT!</strong>`
+        };
+      } else {
+        // Compute the direction from pitch to slip
+        const dx = slipTarget.x - pitchX;
+        const dy = slipTarget.y - pitchY;
+        const length = Math.hypot(dx, dy);
+        const dirX = dx / length;
+        const dirY = dy / length;
+
+        // The point we'll test fielder proximity against
+        const boundaryTargetX = pitchX + dirX * 310; // 310 is approximate radius to ellipse
+        const boundaryTargetY = pitchY + dirY * 310;
+
+        // Find closest fielder to the boundaryTarget
+        let closestDistance = Infinity;
+        for (const fielder of fielders) {
+          const d = Math.hypot(fielder.x - boundaryTargetX, fielder.y - boundaryTargetY);
+          if (d < closestDistance) closestDistance = d;
+        }
+
+        let lineLength;
+        let runs, result;
+
+        if (closestDistance < 50) {
+          lineLength = 280;
+          runs = 1;
+          result = `Ball edges past <strong>${chosenSlip}</strong> and is fielded near third man. Scored run = <strong>1</strong>`;
+        } else if (closestDistance < 100) {
+          lineLength = 310;
+          runs = 2;
+          result = `Ball edges past <strong>${chosenSlip}</strong> and slows near third man. Batter gets 2 runs. Scored run = <strong>2</strong>`;
+        } else {
+          lineLength = 320; // enough to cross perimeter visually
+          runs = 4;
+          result = `Ball edges past <strong>${chosenSlip}</strong> and races to the boundary! Scored run = <strong>4</strong>`;
+        }
+
+        // Draw yellow line of calculated length
+        ctx.beginPath();
+        ctx.moveTo(pitchX, pitchY);
+        ctx.lineTo(pitchX + dirX * lineLength, pitchY + dirY * lineLength);
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        return {
+          caught: false,
+          runs: runs,
+          out: false,
+          outputText: result
+        };
+      }
+    }
+
+    function checkForwardShortLegCatch(fielders, fieldRegions) {
+      const target = { x: canvas.width / 2 + 10, y: canvas.height / 2 - pitchLength / 2 + 50 };
+
+      drawCatchAttempt(target.x, target.y); // ← show where the ball went
+
+      let caught = false;
+      for (const fielder of fielders) {
+        const d = Math.hypot(fielder.x - target.x, fielder.y - target.y);
+        if (d < 30) {
+          caught = true;
+          break;
+        }
+      }
+
+      const resultText = caught
+        ? `Ball loops to forward-short-leg. Caught! OUT!`
+        : `Ball loops to forward-short-leg but lands safely.`;
+
+      return { caught, outputText: resultText };
+    }
+
+
+    function setField(fieldType) {
+      while (fielders.length > 2) fielders.pop();
+      fielders.push(...fieldSetups[fieldType]);
+      redraw();
+    }
+
+    document.getElementById('fieldSelect').addEventListener('change', (e) => {
+      setField(e.target.value);
+    });
+
+    let draggingFielder = null;
+    let offsetX = 0, offsetY = 0;
+
+    function drawFielders() {
+      for (const f of fielders) {
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = f.fixed ? '#ff0000' : '#0000ff';
+        ctx.fill();
+        ctx.closePath();
+      }
+    }
+
+    function getFielderAt(x, y) {
+      return fielders.find(f => !f.fixed && Math.hypot(f.x - x, f.y - y) < 10);
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const f = getFielderAt(mouseX, mouseY);
+      if (f) {
+        draggingFielder = f;
+        offsetX = mouseX - f.x;
+        offsetY = mouseY - f.y;
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (draggingFielder) {
+        const rect = canvas.getBoundingClientRect();
+        draggingFielder.x = e.clientX - rect.left - offsetX;
+        draggingFielder.y = e.clientY - rect.top - offsetY;
+        redraw();
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      draggingFielder = null;
+    });
+
+    function drawStumps() {
+      ctx.fillStyle = '#8B4513';
+      const stumpWidth = 1.5, stumpHeight = 10, stumpGap = 3;
+      const topX = canvas.width / 2 - stumpGap;
+      const topY = (canvas.height - pitchLength) / 2 - stumpHeight;
+      for (let i = 0; i < 3; i++) ctx.fillRect(topX + i * stumpGap, topY, stumpWidth, stumpHeight);
+      const bottomX = canvas.width / 2 - stumpGap;
+      const bottomY = (canvas.height + pitchLength) / 2;
+      for (let i = 0; i < 3; i++) ctx.fillRect(bottomX + i * stumpGap, bottomY, stumpWidth, stumpHeight);
+    }
+
+
+    function redraw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.ellipse(canvas.width / 2, canvas.height / 2, fieldWidth / 2, fieldLength / 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#85C226';
+      ctx.fill();
+      ctx.fillStyle = '#F0E130';
+      ctx.fillRect(
+        (canvas.width - pitchWidth) / 2,
+        (canvas.height - pitchLength) / 2,
+        pitchWidth,
+        pitchLength
+      );
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(canvas.width / 2, canvas.height / 2, (fieldWidth / 2) - 5, (fieldLength / 2) - 5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      drawStumps();
+      drawFielders();
+    }
+
+    function showPopup() {
+      document.getElementById("deliveryResult").innerHTML = ""; // Clear previous message
+      document.getElementById("deliveryPopup").style.display = "grid";
+      redraw();
+    }
+
+    document.querySelectorAll('#deliveryPopup button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const deliveryType = btn.dataset.value;
+        window.selectedDeliveryType = deliveryType;
+        document.getElementById("deliveryResult").innerHTML =
+          `Bowler chose to bowl:<br>A <strong>${deliveryType}</strong> delivery.<br>`;
+        document.getElementById("deliveryPopup").style.display = "none";
+        document.getElementById("shotPopup").style.display = "grid";
+
+
+        document.getElementById("deliveryPopup").style.display = "none";
+      });
+    });
+
+    document.querySelectorAll('#shotPopup button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const shot = btn.dataset.shot;
+        const deliveryType = window.selectedDeliveryType;
+        const deliverySuccessRate = deliverySuccessRates[deliveryType];
+        const deliveryRoll = Math.floor(Math.random() * 100) + 1;
+        const deliveryQuality = deliveryRoll < deliverySuccessRate ? 'Good' : 'Bad';
+
+        const key = `${deliveryQuality}-${deliveryType}`;
+        const shotSuccessRate = shotSuccessRates[shot]?.[key] ?? 0;
+        const shotRoll = Math.floor(Math.random() * 100) + 1;
+        const isSuccess = shotRoll <= shotSuccessRate;
+
+        let outcomeText;
+
+        let resultText = (isSuccess
+          ? shotSuccessOutcomes[shot]?.[key]
+          : shotFailureOutcomes[shot]?.[key]) || "Shot played.";
+
+          if (shot === "defensive" && isSuccess) {
+            const template = shotSuccessOutcomes["defensive"][key];
+            if (template.includes("{output}")) {
+              const runOutcome = calculateRunFromDefensiveShot(key, fieldRegions, fielders);
+              resultText = template.replace("{output}", runOutcome.outputText);
+              totalRuns += runOutcome.runs;
+            } else {
+              resultText = template;
+            }
+          }
+
+        // Lookup outcome text:
+
+
+        if (isSuccess) {
+          if (shot === "defensive") {
+            const template = shotSuccessOutcomes["defensive"][key];
+            if (template.includes("{output}")) {
+              const runOutcome = calculateRunFromDefensiveShot(key, fieldRegions, fielders);
+              resultText = template.replace("{output}", runOutcome.outputText);
+            } else {
+              resultText = template;
+            }
+          } else {
+            resultText = shotSuccessOutcomes[shot]?.[key] ?? "Successful shot!";
+          }
+        } else {
+          resultText = shotFailureOutcomes[shot]?.[key] ?? "Failed attempt!";
+        }
+
+        if (!isSuccess) {
+          resultText = shotFailureOutcomes[shot]?.[key] ?? "Failed attempt!";
+
+          if (resultText.includes("{output}")) {
+            let output, extraRuns = 0;
+
+            if (resultText.includes("Edges towards slip region")) {
+              const edgeResult = checkSlipCatch(fielders, fieldRegions);
+              output = edgeResult.outputText;
+
+              if (edgeResult.runs) {
+                totalRuns += edgeResult.runs;
+              }
+            }
+
+            if (resultText.includes("loops out towards forward-short-leg")) {
+              const legResult = checkForwardShortLegCatch(fielders, fieldRegions);
+              output = legResult.outputText;
+            }
+
+            resultText = resultText.replace("{output}", output);
+          }
+        }
+
+
+         // unify for scoring and OUT logic
+
+        // Display final result:
+        document.getElementById("deliveryResult").innerHTML +=
+          `Bowler rolled <strong>${deliveryRoll}</strong>. It is a <strong>${deliveryQuality}</strong> delivery.<br>` +
+          `Batter chose <strong>${shot}</strong><br>` +
+          `Shot success rate: <strong>${shotSuccessRate}%</strong><br>` +
+          `Rolled: <strong>${shotRoll}</strong> → <strong>${isSuccess ? 'Success' : 'Failure'}</strong><br>` +
+          `<strong>Result:</strong> ${resultText}`;
+          if (resultText.includes("OUT")) {
+            totalWickets++;
+          }
+          const runMatch = resultText.match(/Scored run = (\d+)/);
+          if (runMatch) {
+            totalRuns += parseInt(runMatch[1]);
+          }
+
+          ballsBowled++;
+
+
+
+
+        document.getElementById("shotPopup").style.display = "none";
+        document.getElementById("runs").textContent = totalRuns;
+        document.getElementById("wickets").textContent = totalWickets;
+        document.getElementById("balls").textContent = ballsBowled % 6;
+        document.getElementById("overs").textContent = Math.floor(ballsBowled / 6);
+
+      });
+    });
+
+
+
+
+    setField('attacking');
+  </script>
+</body>
+</html>
